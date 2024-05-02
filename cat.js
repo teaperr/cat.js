@@ -40,7 +40,7 @@ client.on('messageCreate', async message => {
 
     if (message.content.startsWith(prefix + 'help')) {
         const args = message.content.split(' ');
-        if (args.length !== 2)  return message.reply('my prefix is ' + prefix + '\n^-^\ncommands:\n' + prefix + 'help [command]\n' + prefix + 'botinfo, ' + prefix + 'gif, ' + prefix + 'upload, ' + prefix + 'ls, ' + prefix + 'test');
+        if (args.length < 2)  return message.reply('my prefix is ' + prefix + '\n^-^\ncommands:\n' + prefix + 'help [command]\n' + prefix + 'botinfo, ' + prefix + 'gif, ' + prefix + 'upload, ' + prefix + 'ls, ' + prefix + 'test');
         const arg = args[1];
         switch (arg) {
             case 'help':
@@ -90,44 +90,61 @@ client.on('messageCreate', async message => {
         let url;
         if (args.length === 2) {
             url = args[1];
-        } else if (uploadedContent.length !== 0) {
-            url = uploadedContent[0].url
+        } else if (uploadedContent) {
+            url = uploadedContent.url; 
         } else {
             return message.reply('please provide a valid url or upload a file :3\nto get usage, try ' + prefix + 'help [command]');
         }
-        if (url.includes('tenor.com')) {
-            await fetch(url)
-            .then(response => response.ok ? response.text() : Promise.reject('Network response was not ok'))
-            .then(htmlContent => {
-                url = null;
-                url = htmlContent.match(/https?:\/\/media1\.tenor\.com\/[^"]+/);
-                if (!url) return message.reply('could not process link 💔');
-            })
-            .catch(error => console.error('There was a problem with the fetch operation:', error));
+        if (url.includes('/tenor.com/')) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const htmlContent = await response.text();
+                const tenorUrlMatch = htmlContent.match(/https?:\/\/media1\.tenor\.com\/[^"]+/);
+                if (!tenorUrlMatch) {
+                    throw new Error('Could not find Tenor media URL in HTML');
+                }
+                url = tenorUrlMatch[0];
+            } catch (error) {
+                console.error('There was a problem processing the Tenor link:', error);
+                return message.reply('Could not process Tenor link 💔');
+            }
         }
-        const [contentType, contentLength, fileNameWithoutExtension, contentName] = getHeaderFileInfo(url);
-
-        const inFile = contentName;
+        discord.TextChannel.sendTyping;
+        let [contentType, contentLength, fileNameWithoutExtension] = await getHeaderFileInfo(url);
+        if (!contentType.includes('image/gif'||'video/')) return message.reply('invalid file type :(');
+        const inFile = url;
         let outFile = fileNameWithoutExtension + '.gif';
         if (fs.existsSync(path.join(gifDir, outFile))) {
-            outFile = fileNameWithoutExtension + (+new Date * Math.random()).toString(36).substring(0,6) + '.gif';
+            outFile = fileNameWithoutExtension + (+new Date() * Math.random()).toString(36).substring(0, 6) + '.gif';
         }
-        await ffmpegInputOutput(inFile, path.join(gifDir, outFile));   
-        const outURL = siteUrl + (encodeURIComponent(outFile));
+    
+        await ffmpegInputOutput(inFile, path.join(gifDir, outFile));
+
+        const outURL = siteUrl + encodeURIComponent(outFile);
         return message.reply(`gif uploaded successfully! you can find it [here](${outURL})`);
     }
-
+    if (message.content === (prefix + 'botinfo')) {
+        return message.reply('cat.js!\na fun little bot that i wrote for my first javascript project.\n\nit\'s nothing too useful, but i like cats.\n\nyou can find the source code for this bot [here](<https://github.com/teaperr/cat.js>)\nabout the creator:\nmy name is thea ^-^ im stupid\n\npfp is of one of my cats, agatha :3\n\nyou can contact me on [discord](<https://discord.com/users/903660750277599322/>) and [twitter](<https://twitter.com/retardmoder/>)\nmy personal website is [thea.tantrum.org](http://thea.tantrum.org)');
+    }
+    if (message.content === (prefix + 'ls')) {
+        fs.readdir(gifDir, (error, files) => {
+            if (error) console.log('error reading gif dir:', error);
+            const gifFiles = files.filter(file => path.extname(file).toLowerCase() === '.gif');
+            if (gifFiles.length === 0) return message.reply('no gifs files found,, upload some with ' + prefix + 'upload [url/attachment]');
+            message.reply(`gif count: ${gifFiles.length}`);
+        });
+    }
     if (message.content === (prefix + 'test')) {
         return message.reply(':3');
-      }
+    }
 });
 
 async function getHeaderFileInfo(url) {
     try {
         const response = await fetch(url, { method: 'HEAD' });
-        if (!response.ok) {
-            throw new Error('Response was not ok');
-        }
 
         const headers = response.headers;
         const contentType = headers.get('Content-Type');
@@ -141,15 +158,17 @@ async function getHeaderFileInfo(url) {
 
         return [contentType, contentLength, fileNameWithoutExtension, contentName];
     } catch (error) {
-        console.error('Error parsing header for info:', error);
+        console.error('Error fetching header info:', error);
         throw error;
     }
 }
 
+
+
 async function ffmpegInputOutput(inputFilename, outputFilename) {
     return new Promise((resolve, reject) => {
-        const command = `ffmpeg -i "${inputFilename}" -vf "fps=10,scale=320:-1:flags=lanczos" -c:v gif -b:v "${process.env.COMPRESSION_RATE}k" "${outputFilename}"`;
-        console.log('ffmpeg command:', command); // Add this line to debug the ffmpeg command
+        const command = `ffmpeg -i "${inputFilename}" -vf "fps=16,scale=320:-1:flags=lanczos" -c:v gif -b:v "${process.env.COMPRESSION_RATE}k" "${outputFilename}"`;
+        console.log('ffmpeg command:', command);
         exec(command, (error, stdout, stderr) => {
             if (error) {
                 console.error('Error converting video to gif:', error);
