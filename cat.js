@@ -68,9 +68,10 @@ client.on('messageCreate', async message => {
                 message.reply('unknown command');
         }
     }
-    if ((mentioned || repliedToBot) && /(hi+|hai+|helo+|hello+)/i.test(message.content))  message.reply(greetMessages[randomIndex]);
-
-    // send a random gif from the gifDir
+    const greetingsRegex = /(hi+|hai+|helo+|hello+|hey+|howdy+|greetings+|sup+|yo+|hoi+)/i;
+    if ((mentioned || repliedToBot) && greetingsRegex.test(message.content)) {
+        message.reply(greetMessages[Math.floor(Math.random() * greetMessages.length)]);
+    }
     if (message.content === (prefix + 'gif')) {
         fs.readdir(gifDir, (error, files) => {
             if (error) console.log('error reading gif dir:', error);
