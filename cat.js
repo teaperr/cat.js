@@ -8,7 +8,7 @@ const { exec } = require('child_process');
 const { error } = require("console");
 
 // process config
-const {TOKEN, MAX_UPLOAD_MB, COMPRESSION_RATE, GIFDIR, SITE_URL, PREFIX} = require('dotenv').config();
+const {TOKEN, MAX_UPLOAD_MB, COMPRESSION_RATE, GIFDIR, SITE_URL, PREFIX, GIF_WIDTH} = require('dotenv').config();
 const botToken = process.env.TOKEN;
 const tenorApiKey = process.env.TENOR_API;
 const gifDir = process.env.GIFDIR;
@@ -168,7 +168,7 @@ async function getHeaderFileInfo(url) {
 
 async function ffmpegInputOutput(inputFilename, outputFilename) {
     return new Promise((resolve, reject) => {
-        const command = `ffmpeg -i "${inputFilename}" -vf "fps=16,scale=320:-1:flags=lanczos" -c:v gif -b:v "${process.env.COMPRESSION_RATE}k" "${outputFilename}"`;
+        const command = `ffmpeg -i "${inputFilename}" -vf "fps=16,scale=${process.env.GIF_WIDTH}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${outputFilename}"`;
         console.log('ffmpeg command:', command);
         exec(command, (error, stdout, stderr) => {
             if (error) {
@@ -180,3 +180,7 @@ async function ffmpegInputOutput(inputFilename, outputFilename) {
         });
     });
 }
+// new command
+// ffmpeg -i "${inputFilename}" -vf "fps=16,scale=${process.env.GIF_WIDTH}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${outputFilename}"
+// old command
+// ffmpeg -i "${inputFilename}" -vf "fps=16,scale=320:-1:flags=lanczos" -c:v gif -b:v "${process.env.COMPRESSION_RATE}k" "${outputFilename}"
