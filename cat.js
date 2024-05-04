@@ -6,6 +6,7 @@ const https = require('https');
 const urlModule = require('url')
 const { exec } = require('child_process');
 const { error } = require("console");
+const { channel } = require("diagnostics_channel");
 
 // process config
 const {TOKEN, MAX_UPLOAD_MB, COMPRESSION_RATE, GIFDIR, SITE_URL, PREFIX, GIF_WIDTH} = require('dotenv').config();
@@ -68,11 +69,17 @@ client.on('messageCreate', async message => {
                 message.reply('unknown command');
         }
     }
-    const greetingsRegex = /(hi+|hai+|helo+|hello+|hey+|howdy+|greetings+|sup+|yo+|hoi+)/i;
+    const greetingsRegex = /\b(hi+|hai+|helo+|hello+|hey+|howdy+|greetings+|sup+|yo+|hoi+)\b/i;
     if ((mentioned || repliedToBot) && greetingsRegex.test(message.content)) {
         message.reply(greetMessages[Math.floor(Math.random() * greetMessages.length)]);
     }
+    
+    if ((mentioned || repliedToBot) && message.content.includes('glugh')) {
+        const messageContent = ['RAAARHG', 'RAAGHGHRHGRGH', 'RAAAAARRRHGGHGHGHGHGHHHGGH', 'RAAARRGGHGHGHGHGHGHGHRGH', 'rawr', 'GO AWAT!!!!!!!!', 'GO AWAY!!!!', 'rarrhjrjharafsd', 'im gonna kil you,,', 'AAAAHHHHHJRGHFGDJHHHJDGJDHGF'];
+        message.reply(messageContent[Math.floor(Math.random() * messageContent.length)]);
+    }
     if (message.content === (prefix + 'gif')) {
+        message.channel.sendTyping();
         fs.readdir(gifDir, (error, files) => {
             if (error) console.log('error reading gif dir:', error);
             const gifFiles = files.filter(file => path.extname(file).toLowerCase() === '.gif');
@@ -89,12 +96,28 @@ client.on('messageCreate', async message => {
         const args = message.content.split(' ');
         const uploadedContent = message.attachments.first();
         let url;
+        message.channel.sendTyping();
         if (args.length === 2) {
             url = args[1];
         } else if (uploadedContent) {
             url = uploadedContent.url; 
+        } else if (message.reference) {
+            try {
+                const referencedMessage = await message.fetchReference();
+                if (urlRegex.test(referencedMessage.content)) {
+                    const urlMatch = referencedMessage.content.match(urlRegex);
+                    if (urlMatch) {
+                        url = urlMatch[0];
+                    }
+                } else if (referencedMessage.attachments.first) {
+                    url = referencedMessage.attachments.first.url;
+                }
+            } catch (error) {
+                console.error('err fetching referenced message:', error);
+                message.reply('could not find content in referenced message');
+            }
         } else {
-            return message.reply('please provide a valid url or upload a file :3\nto get usage, try ' + prefix + 'help [command]');
+            return message.reply('please provide a valid url, upload a file or reply to a message with media content :3\nto get usage, try ' + prefix + 'help [command]');
         }
         if (url.includes('/tenor.com/')) {
             try {
@@ -113,7 +136,6 @@ client.on('messageCreate', async message => {
                 return message.reply('Could not process Tenor link 💔');
             }
         }
-        discord.TextChannel.sendTyping;
         let [contentType, contentLength, fileNameWithoutExtension] = await getHeaderFileInfo(url);
         if ((!contentType.includes('image/gif'||'video/')) && (!/\.(mp4|mov|avi|mkv|wmv|flv|webm|gif)$/.test(url))) return message.reply('invalid file type :(');
         const inFile = url;
@@ -121,8 +143,11 @@ client.on('messageCreate', async message => {
         if (fs.existsSync(path.join(gifDir, outFile))) {
             outFile = fileNameWithoutExtension + (+new Date() * Math.random()).toString(36).substring(0, 6) + '.gif';
         }
-    
-        await ffmpegInputOutput(inFile, path.join(gifDir, outFile));
+        if (inFile.includes('.gif')) {
+            await downloadGif(inFile, path.join(gifDir, outFile));
+        } else {
+            await ffmpegInputOutput(inFile, path.join(gifDir, outFile));
+        }
 
         const outURL = siteUrl + encodeURIComponent(outFile);
         return message.reply(`gif uploaded successfully! you can find it [here](${outURL})`);
@@ -137,6 +162,10 @@ client.on('messageCreate', async message => {
             if (gifFiles.length === 0) return message.reply('no gifs files found,, upload some with ' + prefix + 'upload [url/attachment]');
             message.reply(`gif count: ${gifFiles.length}`);
         });
+
+    }
+    if (message.content === (prefix + 'mondaymorning')) {
+        return message.reply('https://media.discordapp.net/attachments/1157523563729932360/1236014296199336037/attachment.gif?ex=66367784&is=66352604&hm=3ccc0f7325bc080655f81777763554b6d5044a158013d4813ff3518b8914dcc0&=')
     }
     if (message.content === (prefix + 'test')) {
         return message.reply(':3');
@@ -164,18 +193,64 @@ async function getHeaderFileInfo(url) {
     }
 }
 
+async function getMediaLink(message) {
+    const repliedMessage = message.reference?.messageID && await message.channel.messages.fetch(message.reference.messageID);
+    const media = repliedMessage && (
+        repliedMessage.attachments.size > 0 ? repliedMessage.attachments.first().url :
+        repliedMessage.embeds.length > 0 ? repliedMessage.embeds[0].url :
+        null
+    );    
+    return media;
+}
 
+
+async function downloadGif(inputFilename, outputFilename) {
+    return new Promise((resolve, reject) => {
+        const wgetCommand = `wget "${inputFilename}" -O "${outputFilename}"`;
+        console.log('wget command:', wgetCommand);
+        const wgetProcess = exec(wgetCommand, {
+            shell: true,
+            detached: true,
+            stdio: 'ignore'
+    });
+        wgetProcess.unref();
+        wgetProcess.on('error', (error) => {
+            console.error('error with wget:', error);
+            reject(error);
+        });
+        wgetProcess.on('exit', (code, signal) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                const errorMessage = `wget process exited with code ${code} and signal ${signal}`;
+                console.error(errorMessage);
+                reject(new Error(errorMessage));
+            }
+        });
+    });
+}
 
 async function ffmpegInputOutput(inputFilename, outputFilename) {
     return new Promise((resolve, reject) => {
-        const command = `ffmpeg -i "${inputFilename}" -vf "fps=16,scale=${process.env.GIF_WIDTH}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${outputFilename}"`;
+        const command = `ffmpeg -i "${inputFilename}" -vf "fps=24,scale=${process.env.GIF_WIDTH}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${outputFilename}"`;
         console.log('ffmpeg command:', command);
-        exec(command, (error, stdout, stderr) => {
-            if (error) {
-                console.error('Error converting video to gif:', error);
-                reject(error);
-            } else {
+        const ffmpegProcess = exec(command, {
+            shell: true,
+            detached: true,
+            stdio: 'ignore'
+    });
+        ffmpegProcess.unref();
+        ffmpegProcess.on('error', (error) => {
+            console.error('error with ffmpeg:', error);
+            reject(error);
+        });
+        ffmpegProcess.on('exit', (code, signal) => {
+            if (code === 0) {
                 resolve();
+            } else {
+                const errorMessage = `ffmpeg process exited with code ${code} and signal ${signal}`;
+                console.error(errorMessage);
+                reject(new Error(errorMessage));
             }
         });
     });
