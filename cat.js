@@ -19,6 +19,13 @@ const prefix = process.env.PREFIX;
 const maxFileSizeBytes = process.env.MAX_UPLOAD_MB * 1024 * 1024;
 const greetMessages = require('./greetMessages.json').greetMessages;
 
+let channelSettings = {};
+try {
+    channelSettings = require('./channelSettings.json');
+} catch (err) {
+    console.error('err loading starboard channel data', err);
+}
+
 const client = new discord.Client({
     intents: [
       discord.Intents.FLAGS.GUILDS,
@@ -28,6 +35,7 @@ const client = new discord.Client({
       discord.Intents.FLAGS.GUILD_PRESENCES,
       discord.Intents.FLAGS.GUILD_MESSAGES,
       discord.Intents.FLAGS.GUILD_MESSAGE_TYPING,
+      discord.Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
       discord.Intents.FLAGS.MESSAGE_CONTENT
     ]
   });
@@ -41,11 +49,11 @@ client.on('messageCreate', async message => {
 
     if (message.content.startsWith(prefix + 'help')) {
         const args = message.content.split(' ');
-        if (args.length < 2)  return message.reply('my prefix is ' + prefix + '\n^-^\ncommands:\n' + prefix + 'help [command]\n' + prefix + 'botinfo, ' + prefix + 'gif, ' + prefix + 'upload, ' + prefix + 'ls, ' + prefix + 'test');
+        if (args.length < 2)  return message.reply(`my prefix is ${prefix}\n^-^\ncommands:\n${prefix}help [command]\n${prefix}botinfo, ${prefix}gif, ${prefix}upload, ${prefix}ls, ${prefix}test`);
         const arg = args[1];
         switch (arg) {
             case 'help':
-                const helpCount = (message.content.match(/help/g) || []).length;
+                const helpCount = ((message.content.match(/help/g) || []).length) - 1;
                 let response = '';
                 for (let i = 0; i < helpCount; i++) response += 'wat? ';
                 message.reply(response);
@@ -54,17 +62,22 @@ client.on('messageCreate', async message => {
                 message.reply('cat.js!\na fun little bot that i wrote for my first javascript project.\n\nit\'s nothing too useful, but i like cats.\n\nyou can find the source code for this bot [here](<https://github.com/teaperr/cat.js>)\nabout the creator:\nmy name is thea ^-^ im stupid\n\npfp is of one of my cats, agatha :3\n\nyou can contact me on [discord](<https://discord.com/users/903660750277599322/>) and [twitter](<https://twitter.com/retardmoder/>)\nmy personal website is [thea.tantrum.org](http://thea.tantrum.org)');
                 break;    
             case 'gif':
-                message.reply('sends a random gif from the cat gifs folder on my [website](<http://thea.tantrum.org>)\n\nusage: ' + prefix + 'gif');
+                message.reply(`sends a random gif from the cat gifs folder on my [website](<http://thea.tantrum.org>)\n\nusage: ${prefix}gif`);
                 break;
             case 'upload':
-                message.reply('uploads a gif to [my site](<http://thea.tantrum.org>), which is accessible via the "' + prefix + 'gif" command\n\nusage: ' + prefix + 'upload [file/url]\n\nvideos are automatically converted to gifs thanks to [ffmpeg](<https://github.com/FFmpeg/FFmpeg>)!');
+                message.reply(`uploads a gif to [my site](<http://thea.tantrum.org>), which is accessible via the ${prefix}gif command\n\nusage: ${prefix}upload [file/url]\n\nvideos are automatically converted to gifs thanks to [ffmpeg](<https://github.com/FFmpeg/FFmpeg>)!`);
                 break;    
             case 'ls':
-                message.reply('lists the amount of gifs that are downloaded to my site :3\n\nusage: ' + prefix + 'ls');
+                message.reply(`lists the amount of gifs that are downloaded to my site :3\n\nusage: ${prefix}ls`);
                 break;    
             case 'test':
-                message.reply('sends a test message ^-^\n\nusage: ' + prefix + 'test');
-                break;    
+                message.reply(`sends a test message ^-^\n\nusage: ${prefix}test`);
+                break;
+            case 'setskullboard':
+                message.reply(`sets settings for the skullboard, a version of starboard meant for shaming people's worst messages.\nusage: ${prefix}setskullboard [channel] [emoji] [votecount]`);
+                break;
+            case 'skullboard':
+                message.reply(`prints info about your skullboard settings.`);
             default:
                 message.reply('unknown command');
         }
@@ -83,7 +96,7 @@ client.on('messageCreate', async message => {
         fs.readdir(gifDir, (error, files) => {
             if (error) console.log('error reading gif dir:', error);
             const gifFiles = files.filter(file => path.extname(file).toLowerCase() === '.gif');
-            if (gifFiles.length === 0) return message.reply('no gifs files found,, upload some with ' + prefix + 'upload [url/attachment]');
+            if (gifFiles.length === 0) return message.reply(`no gifs files found,, upload some with ${prefix}upload [url/attachment]`);
             const randomGif = files[Math.floor(Math.random() * files.length)];
             const gifPath = path.join(gifDir, randomGif);
             message.reply({
@@ -117,23 +130,32 @@ client.on('messageCreate', async message => {
                 message.reply('could not find content in referenced message');
             }
         } else {
-            return message.reply('please provide a valid url, upload a file or reply to a message with media content :3\nto get usage, try ' + prefix + 'help [command]');
+            return message.reply(`please provide a valid url, upload a file or reply to a message with media content :3\nto get usage, try ${prefix}help [command]`);
         }
-        if (url.includes('/tenor.com/')) {
+        if (url.includes('/tenor.com/'||'/giphy.com/')) {
             try {
                 const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
                 }
                 const htmlContent = await response.text();
-                const tenorUrlMatch = htmlContent.match(/https?:\/\/media1\.tenor\.com\/[^"]+/);
+                const tenorUrlMatch = htmlContent.match(/https?:\/\/(media1\.tenor\.com|media2\.giphy\.com)\/[^"]+/);
                 if (!tenorUrlMatch) {
                     throw new Error('Could not find Tenor media URL in HTML');
                 }
                 url = tenorUrlMatch[0];
+                if (url.includes('/media2.giphy.com/')) {
+                    const giphyResponse = await fetch(url);
+                    const giphyContent = await  giphyResponse.text();
+                    const giphyUrlMatch = htmlContent.match(/https?:\/\/(i\.giphy\.com)\/[^"]+/); 
+                    if (!giphyUrlMatch) {
+                        throw new Error('Could not find Giphy media URL in HTML');
+                    }
+                    url = giphyUrlMatch[0];
+                }
             } catch (error) {
-                console.error('There was a problem processing the Tenor link:', error);
-                return message.reply('Could not process Tenor link 💔');
+                console.error('There was a problem processing the Tenor/Giphy link:', error);
+                return message.reply('Could not process Tenor/Giphy link 💔');
             }
         }
         let [contentType, contentLength, fileNameWithoutExtension] = await getHeaderFileInfo(url);
@@ -159,7 +181,7 @@ client.on('messageCreate', async message => {
         fs.readdir(gifDir, (error, files) => {
             if (error) console.log('error reading gif dir:', error);
             const gifFiles = files.filter(file => path.extname(file).toLowerCase() === '.gif');
-            if (gifFiles.length === 0) return message.reply('no gifs files found,, upload some with ' + prefix + 'upload [url/attachment]');
+            if (gifFiles.length === 0) return message.reply(`no gifs files found,, upload some with ${prefix}upload [url/attachment]`);
             message.reply(`gif count: ${gifFiles.length}`);
         });
 
@@ -170,7 +192,94 @@ client.on('messageCreate', async message => {
     if (message.content === (prefix + 'test')) {
         return message.reply(':3');
     }
+
+    if (message.content.startsWith(prefix + 'skullboard')) {
+        const channelSettings = require('./channelSettings.json');
+        const guildID = message.guildId;
+        const channelID = channelSettings[guildID].channelID;
+        const voteEmoji = channelSettings[guildID].voteEmoji;
+        const voteCount = channelSettings[guildID].voteCount;
+        return message.reply(`skullboard settings:\n    channel: <#${channelID}>\n    emoji: ${voteEmoji}\n    vote count: ${voteCount}`);
+    }
+
+    if (message.content.startsWith(prefix + 'setskullboard')) {
+        if (!message.member.permissions.has('MANAGE_CHANNELS')) {
+            return message.reply('you do not have permission to set the skullboard channel (requires manage channels permission)');
+        }
+        const args = message.content.split(' ');
+        if (args.length < 4) return message.reply(`not enough arguments provided, use ${prefix}help setskullboard to get info about this command`);
+        if (args.length > 4) return message.reply('please check that you typed your command correctly');
+        if (args.join(' ').includes('  ')) return message.reply('please check that there are no double spaces in your command');
+        const channelID = args[1].replace(/[<#>]/g, '');
+        const voteEmoji = args[2];
+        const voteCount = args[3]
+        const guildID = message.guildId;
+        const channelSettings = require('./channelSettings.json');
+        channelSettings[guildID] = {
+            channelID,
+            voteEmoji,
+            voteCount
+        };
+        fs.writeFile('./channelSettings.json', JSON.stringify(channelSettings, null, 2), err => {
+            if (err) {
+                console.error('Error saving to channelSettings.json:', err);
+                return message.reply('failed to set skullboard channel. Error with saving JSON data');
+            }
+            message.reply(`skullboard settings saved successfully:\nchannel: ${args[1]}\nemoji: ${voteEmoji}\ncount: ${voteCount}`);
+        });
+    }
+
 });
+
+client.on('messageReactionAdd', async (reaction, user) => {
+    if (user.bot) return;
+
+    const channelSettings = require('./channelSettings.json');
+    const skullboardData = require('./skullboardData.json');
+    const guildID = reaction.message.guildId;
+    if (!channelSettings[guildID] || channelSettings[guildID].voteEmoji !== reaction.emoji.name) return;
+
+    const skullboardChannelID = channelSettings[guildID].channelID;
+    const skullboardChannel = client.channels.cache.get(skullboardChannelID);
+    if (!skullboardChannel || !skullboardChannel.isText()) return;
+
+    const originalMessage = reaction.message;
+    const reactionCount = reaction.count;
+    const voteThreshold = channelSettings[guildID].voteCount || 5;
+    if (reactionCount >= voteThreshold) {
+    const authorID = originalMessage.author.id;
+    const messageLink = `https://discord.com/channels/${originalMessage.guildId}/${originalMessage.channelId}/${originalMessage.id}`;
+
+    if (!skullboardData[guildID]) skullboardData[guildID] = [];
+    if (skullboardData[guildID].includes(messageLink)) {
+        return;        
+    } else {
+        skullboardData[guildID].push(messageLink);
+    }
+
+    fs.writeFileSync('./skullboardData.json', JSON.stringify(skullboardData, null, 2));
+
+    let embed = null;
+    if (originalMessage.embeds.length > 0) {
+        embed = originalMessage.embeds[0];
+    }
+
+    let messageToSend = `<@${authorID}> shamed in <#${originalMessage.channelId}>\n[Jump to Message](${messageLink})`;
+    if (embed) {
+        messageToSend += `\n\n**Embed**`;
+    }
+
+    skullboardChannel.send(messageToSend, { embeds: [embed] })
+        .then(() => {
+            console.log('Starboard message sent successfully!');
+        })
+        .catch(error => {
+            console.error('Error sending starboard message:', error);
+        });
+    }
+});
+
+
 
 async function getHeaderFileInfo(url) {
     try {
@@ -202,7 +311,6 @@ async function getMediaLink(message) {
     );    
     return media;
 }
-
 
 async function downloadGif(inputFilename, outputFilename) {
     return new Promise((resolve, reject) => {
