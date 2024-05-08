@@ -159,7 +159,7 @@ client.on('messageCreate', async message => {
             }
         }
         let [contentType, contentLength, fileNameWithoutExtension] = await getHeaderFileInfo(url);
-        if ((!contentType.includes('image/gif'||'video/')) && (!/\.(mp4|mov|avi|mkv|wmv|flv|webm|gif)$/.test(url))) return message.reply('invalid file type :(');
+        if ((!contentType.includes('image/gif'||'video/')) && (!/\.(mp4|mov|avi|mkv|wmv|flv|webm|gif)(\?.*)?$/.test(url))) return message.reply('invalid file type :(');
         const inFile = url;
         let outFile = fileNameWithoutExtension + '.gif';
         if (fs.existsSync(path.join(gifDir, outFile))) {
