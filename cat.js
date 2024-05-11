@@ -132,6 +132,7 @@ client.on('messageCreate', async message => {
         } else {
             return message.reply(`please provide a valid url, upload a file or reply to a message with media content :3\nto get usage, try ${prefix}help [command]`);
         }
+        
         if (url.includes('/tenor.com/'||'/giphy.com/')) {
             try {
                 const response = await fetch(url);
@@ -165,13 +166,16 @@ client.on('messageCreate', async message => {
         if (fs.existsSync(path.join(gifDir, outFile))) {
             outFile = fileNameWithoutExtension + (+new Date() * Math.random()).toString(36).substring(0, 6) + '.gif';
         }
-        if (inFile.includes('.gif')) {
+        const outURL = siteUrl + encodeURIComponent(outFile);
+        if (await testForAlreadyUploaded(url)) {
+            message.reply(`the gif you have provided has already been uploaded! you can find it [here](${siteUrl + encodeURIComponent(fileNameWithoutExtension + '.gif')})`);
+            return;
+        } else if (inFile.includes('.gif')) {
             await downloadGif(inFile, path.join(gifDir, outFile));
         } else {
             await ffmpegInputOutput(inFile, path.join(gifDir, outFile));
         }
 
-        const outURL = siteUrl + encodeURIComponent(outFile);
         return message.reply(`gif uploaded successfully! you can find it [here](${outURL})`);
     }
     if (message.content === (prefix + 'botinfo')) {
@@ -279,7 +283,18 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
 });
 
+async function testForAlreadyUploaded(link) {
+    const uploadedLinks = JSON.parse(fs.readFileSync('./uploadedLinks.json'));
 
+    if (uploadedLinks["links"] && uploadedLinks["links"].includes(link)) {
+        return true;
+    } else {
+        uploadedLinks["links"] = uploadedLinks["links"] || [];
+        uploadedLinks["links"].push(link);
+        fs.writeFileSync('./uploadedLinks.json', JSON.stringify(uploadedLinks, null, 2));
+        return ;
+    }
+}
 
 async function getHeaderFileInfo(url) {
     try {
