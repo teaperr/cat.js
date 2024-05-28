@@ -9,15 +9,7 @@ const { error } = require("console");
 const { channel } = require("diagnostics_channel");
 
 // process config
-const {
-    TOKEN,
-    MAX_UPLOAD_MB,
-    COMPRESSION_RATE,
-    GIFDIR,
-    SITE_URL,
-    PREFIX,
-    GIF_WIDTH,
-} = require("dotenv").config();
+require("dotenv").config();
 const botToken = process.env.TOKEN;
 const tenorApiKey = process.env.TENOR_API;
 const gifDir = process.env.GIFDIR;
@@ -56,24 +48,25 @@ client.on("messageCreate", async (message) => {
     const repliedToBot = message.reference &&
         message.reference.messageID === client.user.id;
 
-    try {
-        if (
-            message.content.includes("https://twitter.com/") ||
-            message.content.includes("https://x.com/")
-        ) {
-            // Replace twitter.com with fxtwitter.com and x.com with fixupx.com
-            const replacedMessage = message.content
-                .replace(/https?:\/\/twitter.com\//g, "https://fxtwitter.com/")
-                .replace(/https?:\/\/x.com\//g, "https://fixupx.com/");
+    if (
+        message.content.includes("https://twitter.com/") ||
+        message.content.includes("https://x.com/")
+    ) {
+        const replacedMessage = message.content
+            .replace(/https?:\/\/twitter.com\//g, "https://fxtwitter.com/")
+            .replace(/https?:\/\/x.com\//g, "https://fixupx.com/");
 
-            // Send the replaced message
-            await message.channel.send(replacedMessage);
-        }
-    } catch (error) {
-        console.error("Error processing message:", error);
+        await message.channel.send(replacedMessage);
     }
 
-    if (message.content.startsWith(prefix + ("coinflip" || "coin"))) {
+    if (message.content.startsWith(prefix + "freakmode true")) {
+        return message.reply("👅");
+    }
+
+    if (
+        message.content.startsWith(prefix + "coinflip") ||
+        message.content.startsWith(prefix + "coin")
+    ) {
         const outputNumber = Math.floor(Math.random() * 2);
         if (outputNumber == 1) {
             return message.reply("heads!");
@@ -157,7 +150,7 @@ client.on("messageCreate", async (message) => {
     if (message.content === (prefix + "gif")) {
         message.channel.sendTyping();
         try {
-            const files = await fs.readdir(gifDir);
+            const files = await fs.promises.readdir(gifDir);
             const gifFiles = files.filter((file) =>
                 path.extname(file).toLowerCase() === ".gif"
             );
@@ -174,7 +167,7 @@ client.on("messageCreate", async (message) => {
             while (gifSize > 8) {
                 const randomGif = gifFiles[Math.floor(Math.random() * gifFiles.length)];
                 gifPath = path.join(gifDir, randomGif);
-                gifSize = (await fs.stat(gifPath)).size / (1024 * 1024);
+                gifSize = (await fs.promises.stat(gifPath)).size / (1024 * 1024);
             }
 
             message.reply({ files: [gifPath] });
@@ -249,12 +242,12 @@ client.on("messageCreate", async (message) => {
         let [contentType, contentLength, fileNameWithoutExtension] =
             await getHeaderFileInfo(url);
         if (
-            (!contentType.includes("image/gif" || "video/")) &&
+            (!contentType.includes("image/gif") || !contentType.includes("video/")) &&
             (!/\.(mp4|mov|avi|mkv|wmv|flv|webm|gif)(\?.*)?$/.test(url))
         ) return message.reply("invalid file type :(");
         const inFile = url;
         let outFile = fileNameWithoutExtension + ".gif";
-        if (fs.existsSync(path.join(gifDir, outFile))) {
+        if (fs.promises.existsSync(path.join(gifDir, outFile))) {
             outFile = fileNameWithoutExtension +
                 (+new Date() * Math.random()).toString(36).substring(0, 6) + ".gif";
         }
@@ -281,7 +274,7 @@ client.on("messageCreate", async (message) => {
         );
     }
     if (message.content === (prefix + "ls")) {
-        fs.readdir(gifDir, (error, files) => {
+        await fs.promises.readdir(gifDir, (error, files) => {
             if (error) console.log("error reading gif dir:", error);
             const gifFiles = files.filter((file) =>
                 path.extname(file).toLowerCase() === ".gif"
@@ -346,7 +339,7 @@ client.on("messageCreate", async (message) => {
             voteEmoji,
             voteCount,
         };
-        fs.writeFile(
+        fs.promises.writeFile(
             "./channelSettings.json",
             JSON.stringify(channelSettings, null, 2),
             (err) => {
@@ -395,7 +388,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
             skullboardData[guildID].push(messageLink);
         }
 
-        fs.writeFileSync(
+        fs.promises.writeFileSync(
             "./skullboardData.json",
             JSON.stringify(skullboardData, null, 2),
         );
@@ -422,14 +415,16 @@ client.on("messageReactionAdd", async (reaction, user) => {
 });
 
 async function testForAlreadyUploaded(link) {
-    const uploadedLinks = JSON.parse(fs.readFileSync("./uploadedLinks.json"));
+    const uploadedLinks = JSON.parse(
+        fs.promises.readFileSync("./uploadedLinks.json"),
+    );
 
     if (uploadedLinks["links"] && uploadedLinks["links"].includes(link)) {
         return true;
     } else {
         uploadedLinks["links"] = uploadedLinks["links"] || [];
         uploadedLinks["links"].push(link);
-        fs.writeFileSync(
+        fs.promises.writeFileSync(
             "./uploadedLinks.json",
             JSON.stringify(uploadedLinks, null, 2),
         );
