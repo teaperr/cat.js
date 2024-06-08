@@ -255,7 +255,23 @@ client.on("messageCreate", async (message) => {
                 (+new Date() * Math.random()).toString(36).substring(0, 6) + ".gif";
         }
         const outURL = siteUrl + encodeURIComponent(outFile);
-        if (await testForAlreadyUploaded(url)) {
+        let isUploaded;
+        const uploadedLinks = JSON.parse(
+            fs.readFileSync("./uploadedLinks.json"),
+        );
+        if (uploadedLinks["links"] && uploadedLinks["links"].includes(url)) {
+            isUploaded = true;
+        } else {
+            uploadedLinks["links"] = uploadedLinks["links"] || [];
+            uploadedLinks["links"].push(url);
+            fs.writeFileSync(
+                "./uploadedLinks.json",
+                JSON.stringify(uploadedLinks, null, 2),
+            );
+            isUploaded = false;
+        }
+
+        if (isUploaded) {
             message.reply(
                 `the gif you have provided has already been uploaded! you can find it [here](${siteUrl + encodeURIComponent(fileNameWithoutExtension + ".gif")
                 })`,
@@ -416,24 +432,6 @@ client.on("messageReactionAdd", async (reaction, user) => {
             });
     }
 });
-
-async function testForAlreadyUploaded(link) {
-    const uploadedLinks = JSON.parse(
-        fs.readFileSync("./uploadedLinks.json"),
-    );
-
-    if (uploadedLinks["links"] && uploadedLinks["links"].includes(link)) {
-        return true;
-    } else {
-        uploadedLinks["links"] = uploadedLinks["links"] || [];
-        uploadedLinks["links"].push(link);
-        fs.writeFileSync(
-            "./uploadedLinks.json",
-            JSON.stringify(uploadedLinks, null, 2),
-        );
-        return;
-    }
-}
 
 async function getHeaderFileInfo(url) {
     try {
