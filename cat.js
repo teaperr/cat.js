@@ -7,6 +7,7 @@ const urlModule = require("url");
 const { exec } = require("child_process");
 const { error } = require("console");
 const { channel } = require("diagnostics_channel");
+const { encode } = require("punycode");
 
 // process config
 require("dotenv").config();
@@ -79,10 +80,11 @@ client.on("messageCreate", async (message) => {
         const args = message.content.split(" ");
         if (args.length < 2) {
             return message.reply(
-                `my prefix is ${prefix}\n^-^\ncommands:\n${prefix}help [command]\n${prefix}botinfo, ${prefix}gif, ${prefix}upload, ${prefix}ls, ${prefix}test`,
+                `my prefix is ${prefix}\n^-^\ncommands:\n${prefix}help [command]\n${prefix}botinfo, ${prefix}img/image, ${prefix}upload, ${prefix}ls, ${prefix}test`,
             );
         }
         const arg = args[1];
+        const imageCommandReply = `sends a random image/gif from the cat gifs folder on my [website](<http://thea.tantrum.org>)\n\nusage: ${prefix}img/image`;
         switch (arg) {
             case "help":
                 const helpCount = ((message.content.match(/help/g) || []).length) - 1;
@@ -94,17 +96,17 @@ client.on("messageCreate", async (message) => {
                 return message.reply(
                     "cat.js!\na fun little bot that i wrote for my first javascript project.\n\nit's nothing too useful, but i like cats.\n\nyou can find the source code for this bot [here](<https://github.com/teaperr/cat.js>)\nabout the creator:\nmy name is thea ^-^ im stupid\n\npfp is of one of my cats, agatha :3\n\nyou can contact me on [discord](<https://discord.com/users/903660750277599322/>) and [twitter](<https://twitter.com/retardmoder/>)\nmy personal website is [thea.tantrum.org](http://thea.tantrum.org)",
                 );
-            case "gif":
-                return message.reply(
-                    `sends a random gif from the cat gifs folder on my [website](<http://thea.tantrum.org>)\n\nusage: ${prefix}gif`,
-                );
+            case "img":
+                return message.reply(imageCommandReply);
+            case "image":
+                return message.reply(imageCommandReply);
             case "upload":
                 return message.reply(
-                    `uploads a gif to [my site](<http://thea.tantrum.org>), which is accessible via the ${prefix}gif command\n\nusage: ${prefix}upload [file/url]\n\nvideos are automatically converted to gifs thanks to [ffmpeg](<https://github.com/FFmpeg/FFmpeg>)!`,
+                    `uploads a gif/image to [my site](<http://thea.tantrum.org>), which is accessible via the ${prefix}img/image command\n\nusage: ${prefix}upload [file/url]\n\nvideos are automatically converted to gifs thanks to [ffmpeg](<https://github.com/FFmpeg/FFmpeg>)!`,
                 );
             case "ls":
                 return message.reply(
-                    `lists the amount of gifs that are downloaded to my site :3\n\nusage: ${prefix}ls`,
+                    `lists the amount of gifs/images that are downloaded to my site :3\n\nusage: ${prefix}ls`,
                 );
             case "test":
                 return message.reply(
@@ -150,13 +152,11 @@ client.on("messageCreate", async (message) => {
             messageContent[Math.floor(Math.random() * messageContent.length)],
         );
     }
-    if (message.content === (prefix + "gif")) {
+    if (message.content === (prefix + "gif") || message.content === (prefix + "img") || message.content === (prefix + "image")) {
         message.channel.sendTyping();
         try {
             const files = await fs.promises.readdir(gifDir);
-            const gifFiles = files.filter((file) =>
-                path.extname(file).toLowerCase() === ".gif"
-            );
+            const gifFiles = files;
 
             if (gifFiles.length === 0) {
                 return message.reply(
@@ -242,11 +242,11 @@ client.on("messageCreate", async (message) => {
                 return message.reply("Could not process Tenor/Giphy link 💔");
             }
         }
-        let [contentType, contentLength, fileNameWithoutExtension] =
+        let [contentType, contentLength, fileNameWithoutExtension, contentName] =
             await getHeaderFileInfo(url);
         if (
-            (!contentType.includes("image/gif") || !contentType.includes("video/")) &&
-            (!/\.(mp4|mov|avi|mkv|wmv|flv|webm|gif)(\?.*)?$/.test(url))
+            (!contentType.includes("image/") || !contentType.includes("video/")) &&
+            (!/\.(mp4|mov|avi|mkv|wmv|flv|webm|gif|png|jpg|jpeg)(\?.*)?$/.test(url))
         ) return message.reply("invalid file type :(");
         const inFile = url;
         let outFile = fileNameWithoutExtension + ".gif";
@@ -254,7 +254,6 @@ client.on("messageCreate", async (message) => {
             outFile = fileNameWithoutExtension +
                 (+new Date() * Math.random()).toString(36).substring(0, 6) + ".gif";
         }
-        const outURL = siteUrl + encodeURIComponent(outFile);
         let isUploaded;
         const uploadedLinks = JSON.parse(
             fs.readFileSync("./uploadedLinks.json"),
@@ -271,6 +270,7 @@ client.on("messageCreate", async (message) => {
             isUploaded = false;
         }
 
+        let outURL = siteUrl + encodeURIComponent(outFile);
         if (isUploaded) {
             message.reply(
                 `the gif you have provided has already been uploaded! you can find it [here](${siteUrl + encodeURIComponent(fileNameWithoutExtension + ".gif")
@@ -279,12 +279,16 @@ client.on("messageCreate", async (message) => {
             return;
         } else if (inFile.toLowerCase().includes(".gif")) {
             await downloadGif(inFile, path.join(gifDir, outFile));
+        } else if (inFile.toLowerCase().includes(".jpg") || inFile.toLowerCase().includes(".jpeg") || inFile.toLowerCase().includes(".png")) {
+            await downloadGif(inFile, path.join(gifDir, (fileNameWithoutExtension + ".webp")));
+            outFile = fileNameWithoutExtension + ".webp";
         } else {
             await ffmpegInputOutput(inFile, path.join(gifDir, outFile));
         }
 
+        outURL = siteUrl + encodeURIComponent(outFile);
         return message.reply(
-            `gif uploaded successfully! you can find it [here](${outURL})`,
+            `uploaded successfully! you can find it [here](${outURL})`,
         );
     }
     if (message.content.toLowerCase() === (prefix + "botinfo")) {
@@ -294,16 +298,20 @@ client.on("messageCreate", async (message) => {
     }
     if (message.content.toLowerCase() === (prefix + "ls")) {
         await fs.readdir(gifDir, (error, files) => {
-            if (error) console.log("error reading gif dir:", error);
-            const gifFiles = files.filter((file) =>
-                path.extname(file).toLowerCase() === ".gif"
-            );
-            if (gifFiles.length === 0) {
+            if (error) {
+                console.log("error reading directory:", error);
+                return;
+            }
+            const imageFiles = files.filter((file) => {
+                const ext = path.extname(file).toLowerCase();
+                return ext === ".gif" || ext === ".png" || ext === ".jpg" || ext === ".jpeg";
+            });
+            if (imageFiles.length === 0) {
                 return message.reply(
-                    `no gifs files found,, upload some with ${prefix}upload [url/attachment]`,
+                    `no image files found, upload some with ${prefix}upload [url/attachment]`
                 );
             }
-            message.reply(`gif count: ${gifFiles.length}`);
+            message.reply(`image count: ${imageFiles.length}`);
         });
     }
     if (message.content.toLowerCase() === (prefix + "mondaymorning")) {
