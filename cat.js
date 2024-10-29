@@ -8,6 +8,7 @@ const { exec } = require("child_process");
 const { error } = require("console");
 const { channel } = require("diagnostics_channel");
 const { encode } = require("punycode");
+const { randomInt } = require("crypto");
 
 // process config
 require("dotenv").config();
@@ -64,6 +65,10 @@ client.on("messageCreate", async (message) => {
         return message.reply("👅");
     }
 
+    if (message.content.toLowerCase().startsWith(prefix + "creppymode true")) {
+        return message.reply("https://media.discordapp.net/attachments/1157523563729932360/1259053848048173107/120d6c08b3a21ca74c9127f47ccb1d527e931922bfcebf715ae76236448776d5_1.png?ex=668a48c5&is=6688f745&hm=e9fb0f0486ae1fb7134227b56075a4e154cd1cb564e2d8b86631a168e57edad1&=&format=webp&quality=lossless");
+    }
+
     if (
         message.content.toLowerCase().startsWith(prefix + "coinflip") ||
         message.content.toLowerCase().startsWith(prefix + "coin")
@@ -73,6 +78,140 @@ client.on("messageCreate", async (message) => {
             return message.reply("heads!");
         } else {
             return message.reply("tails!");
+        }
+    }
+
+    if (message.content.toLowerCase().startsWith(prefix + "whackstats")) {
+        let whackData;
+
+        try {
+            whackData = require("./whackData.json");
+        } catch (error) {
+            // If the file doesn't exist or is malformed, initialize it
+            whackData = { users: {} };
+        }
+
+        const mention = message.mentions.users.first();
+        const userId = mention ? mention.id : message.author.id;
+        const userStats = whackData.users[userId];
+
+        if (!userStats) {
+            return message.reply("no stats found for this user.");
+        }
+
+        const averageTaken = userStats.total_damage_received / userStats.whacks_received;
+        const averageGiven = userStats.total_damage_given / userStats.whacks_given;
+
+        const statsMessage = `
+**whack statistics for ${mention ? mention.username : message.author.username}:**
+- whacks given: ${userStats.whacks_given}
+- whacks received: ${userStats.whacks_received}
+- total damage given: ${userStats.total_damage_given}
+- total damage received: ${userStats.total_damage_received}
+- average damage given: ${averageGiven}
+- average damage taken: ${averageTaken}
+        `;
+
+        message.channel.send(statsMessage);
+    }
+
+
+    if (message.content.toLowerCase().startsWith(prefix + "whack") && !message.content.toLowerCase().startsWith(prefix + "whackstats")) {
+        const whackData = require("./whackData.json");
+
+        const args = message.content.split(" ");
+        const mention = message.mentions.users.first();
+        if (!mention) {
+            return message.reply("please specify someone to whack!");
+        } else if (mention) {
+            // const userInfo = require("./userRPGStats.json");
+            const displayName = message.member.displayName;
+            const sendMessage = await message.reply("rolling...");
+
+            const roll = Math.floor(Math.random() * 6) + 1;
+            const baseDamage = Math.floor(Math.random() * 20) + 1;
+            const totalDamage = roll * baseDamage;
+
+            // const mentionedDisplayName = mention.displayName;
+            const member = message.guild.members.cache.get(message.mentions.users.first().id);
+            const mentionedDisplayName = member ? member.displayName : mentionedUser.username;
+
+            var exclamation = "";
+
+            var isSelfWhacked = false;
+
+            switch (true) {
+                case (totalDamage < 15):
+                    exclamation = " a measly";
+                    break;
+                case (totalDamage >= 15 && totalDamage < 30):
+                    exclamation = " a disappointing";
+                    break;
+                case (totalDamage >= 30 && totalDamage < 45):
+                    exclamation = " a mediocre";
+                    break;
+                case (totalDamage >= 45 && totalDamage < 60):
+                    exclamation = " a decent";
+                    break;
+                case (totalDamage >= 60 && totalDamage < 75):
+                    exclamation = " an above-average";
+                    break;
+                case (totalDamage >= 75 && totalDamage < 90):
+                    exclamation = " a hearty";
+                    break;
+                case (totalDamage >= 90 && totalDamage < 105):
+                    exclamation = " an extraordinary";
+                    break;
+                case (totalDamage >= 105 && totalDamage < 115):
+                    exclamation = " an impressive";
+                    break;
+                case (totalDamage >= 115 && totalDamage < 121):
+                    exclamation = " a whopping";
+                    break;
+                default:
+                    exclamation = "";
+            }
+            var whackMessage = "**" + displayName + " **" + "whacked **" + mentionedDisplayName + "** for" + exclamation + " **" + totalDamage + "**" + " damage!";
+
+            if ((Math.floor(Math.random() * 2) + 1) == 20) {
+                whackMessage = "[ouch!](https://tenor.com/view/jerma-jerma985-slap-gif-15826649) you whacked *yourself* for " + exclamation + " **" + totalDamage + "**!";
+                isSelfWhacked = true;
+            }
+
+            if (!whackData.users[message.author.id]) {
+                whackData.users[message.author.id] = {
+                    whacks_given: 0,
+                    whacks_received: 0,
+                    total_damage_given: 0,
+                    total_damage_received: 0
+                };
+            }
+            if (!whackData.users[mention.id]) {
+                whackData.users[mention.id] = {
+                    whacks_given: 0,
+                    whacks_received: 0,
+                    total_damage_given: 0,
+                    total_damage_received: 0
+                };
+            }
+
+            whackData.users[message.author.id].whacks_given++;
+            whackData.users[mention.id].whacks_received++;
+
+            if (isSelfWhacked) {
+                whackData.users[message.author.id].total_damage_received += totalDamage;
+            } else {
+                whackData.users[message.author.id].total_damage_given += totalDamage;
+                whackData.users[mention.id].total_damage_received += totalDamage;
+            }
+
+            fs.writeFileSync('./whackData.json', JSON.stringify(whackData, null, 4));
+
+
+            setTimeout(async () => {
+                await sendMessage.edit(whackMessage)
+            }, 2500);
+
         }
     }
 
@@ -182,7 +321,7 @@ client.on("messageCreate", async (message) => {
     if (message.content.toLowerCase().startsWith(prefix + "upload")) {
         const args = message.content.split(" ");
         const uploadedContent = message.attachments.first();
-        let url;
+        let url = args[1];
         message.channel.sendTyping();
         if (args.length === 2) {
             url = args[1];
@@ -209,7 +348,7 @@ client.on("messageCreate", async (message) => {
             );
         }
 
-        if (url.includes("/tenor.com/" || "/giphy.com/")) {
+        if (url.includes("/tenor.com/") || url.includes("/giphy.com/")) {
             try {
                 const response = await fetch(url);
                 if (!response.ok) {
@@ -302,10 +441,7 @@ client.on("messageCreate", async (message) => {
                 console.log("error reading directory:", error);
                 return;
             }
-            const imageFiles = files.filter((file) => {
-                const ext = path.extname(file).toLowerCase();
-                return ext === ".gif" || ext === ".png" || ext === ".jpg" || ext === ".jpeg";
-            });
+            const imageFiles = files;
             if (imageFiles.length === 0) {
                 return message.reply(
                     `no image files found, upload some with ${prefix}upload [url/attachment]`
@@ -333,6 +469,68 @@ client.on("messageCreate", async (message) => {
             `skullboard settings:\n    channel: <#${channelID}>\n    emoji: ${voteEmoji}\n    vote count: ${voteCount}`,
         );
     }
+
+    if (message.content.toLowerCase().startsWith(prefix + "fireboard")) {
+        const channelSettings = require("./fireBoardChannelSettings.json");
+        const guildID = message.guildId;
+        const channelID = channelSettings[guildID].channelID;
+        const voteEmoji = channelSettings[guildID].voteEmoji;
+        const voteCount = channelSettings[guildID].voteCount;
+        return message.reply(
+            `fireboard settings:\n    channel: <#${channelID}>\n    emoji: ${voteEmoji}\n    vote count: ${voteCount}`,
+        );
+    }
+
+    if (message.content.toLowerCase().startsWith(prefix + "setfireboard")) {
+        if (!message.member.permissions.has("MANAGE_CHANNELS")) {
+            return message.reply(
+                "you do not have permission to set the fireboard channel (requires manage channels permission)",
+            );
+        }
+        const args = message.content.split(" ");
+        if (args.length < 4) {
+            return message.reply(
+                `not enough arguments provided, use ${prefix}help setfireboard to get info about this command`,
+            );
+        }
+        if (args.length > 4) {
+            return message.reply(
+                "please check that you typed your command correctly",
+            );
+        }
+        if (args.join(" ").includes("  ")) {
+            return message.reply(
+                "please check that there are no double spaces in your command",
+            );
+        }
+        const channelID = args[1].replace(/[<#>]/g, "");
+        const voteEmoji = args[2];
+        const voteCount = args[3];
+        const guildID = message.guildId;
+        const channelSettings = require("./fireBoardChannelSettings.json");
+        channelSettings[guildID] = {
+            channelID,
+            voteEmoji,
+            voteCount,
+        };
+        fs.writeFileSync(
+            "./fireBoardChannelSettings.json",
+            JSON.stringify(channelSettings, null, 2),
+            (err) => {
+                if (err) {
+                    console.error("Error saving to channelSettings.json:", err);
+                    return message.reply(
+                        "failed to set fireboard channel. Error with saving JSON data",
+                    );
+                }
+                message.reply(
+                    `fireboard settings saved successfully:\nchannel: ${args[1]
+                    }\nemoji: ${voteEmoji}\ncount: ${voteCount}`,
+                );
+            },
+        );
+    }
+
 
     if (message.content.toLowerCase().startsWith(prefix + "setskullboard")) {
         if (!message.member.permissions.has("MANAGE_CHANNELS")) {
@@ -388,58 +586,80 @@ client.on("messageCreate", async (message) => {
 client.on("messageReactionAdd", async (reaction, user) => {
     if (user.bot) return;
 
+    const guildID = reaction.message.guildId;
     const channelSettings = require("./channelSettings.json");
     const skullboardData = require("./skullboardData.json");
-    const guildID = reaction.message.guildId;
-    if (
-        !channelSettings[guildID] ||
-        channelSettings[guildID].voteEmoji !== reaction.emoji.name
-    ) return;
+    const fireBoardChannelSettings = require("./fireBoardChannelSettings.json");
+    const fireBoardData = require("./fireBoardData.json");
 
-    const skullboardChannelID = channelSettings[guildID].channelID;
-    const skullboardChannel = client.channels.cache.get(skullboardChannelID);
-    if (!skullboardChannel || !skullboardChannel.isText()) return;
+    const starboardSettings = channelSettings[guildID];
+    const fireboardSettings = fireBoardChannelSettings[guildID];
 
-    const originalMessage = reaction.message;
-    const reactionCount = reaction.count;
-    const voteThreshold = channelSettings[guildID].voteCount || 5;
-    if (reactionCount >= voteThreshold) {
-        const authorID = originalMessage.author.id;
-        const messageLink =
-            `https://discord.com/channels/${originalMessage.guildId}/${originalMessage.channelId}/${originalMessage.id}`;
+    const isStarboard = starboardSettings && starboardSettings.voteEmoji === reaction.emoji.name;
+    const isFireboard = fireboardSettings && fireboardSettings.voteEmoji === reaction.emoji.name;
 
-        if (!skullboardData[guildID]) skullboardData[guildID] = [];
-        if (skullboardData[guildID].includes(messageLink)) {
-            return;
-        } else {
-            skullboardData[guildID].push(messageLink);
+    if (!isStarboard && !isFireboard) {
+        return;
+    }
+
+    const handleChannel = async (channelID, data, boardType, footerText) => {
+        const boardChannel = client.channels.cache.get(channelID);
+        if (!boardChannel || !boardChannel.isText()) return;
+
+        const voteThreshold = boardType === 'skullboard' ? starboardSettings.voteCount : fireboardSettings.voteCount;
+        if (reaction.count >= voteThreshold) {
+            const originalMessage = reaction.message;
+            const messageLink = `https://discord.com/channels/${guildID}/${originalMessage.channelId}/${originalMessage.id}`;
+
+            if (!data[guildID]) data[guildID] = [];
+            if (data[guildID].includes(messageLink)) return;
+
+            data[guildID].push(messageLink);
+            fs.writeFileSync(`./${boardType}Data.json`, JSON.stringify(data, null, 2));
+
+            const embed = new discord.MessageEmbed()
+                .setColor('#0099ff')
+                .setAuthor(originalMessage.author.tag, originalMessage.author.displayAvatarURL())
+                .setURL(messageLink)
+                .setFooter(footerText)
+                .setTimestamp(originalMessage.createdAt)
+                .setDescription(`[Jump to message](${messageLink})\n${originalMessage.content || ''}`);
+
+            // Handle image/video URL in embeds
+            if (originalMessage.embeds.length > 0) {
+                const embedData = originalMessage.embeds[0];
+
+                if (embedData.image && embedData.image.url) {
+                    embed.setImage(embedData.url);
+                } else if (embedData.video && embedData.video.url) {
+                    embed.setImage(embedData.url);
+                } else if (embedData.type === 'gifv' && embedData.url) {
+                    embed.setImage(embedData.url);
+                }
+            } else if (originalMessage.attachments.size > 0) {
+                const attachment = originalMessage.attachments.first();
+                if (attachment && attachment.contentType && attachment.contentType.startsWith('image/')) {
+                    embed.setImage(attachment.url);
+                }
+            }
+
+            try {
+                await boardChannel.send({ embeds: [embed] });
+            } catch (error) {
+                console.error(`Error sending ${boardType} message:`, error);
+            }
         }
+    };
 
-        fs.writeFileSync(
-            "./skullboardData.json",
-            JSON.stringify(skullboardData, null, 2),
-        );
+    if (isStarboard) {
+        handleChannel(starboardSettings.channelID, skullboardData, 'skullboard', 'Shamed in Skullboard');
+    }
 
-        let embed = null;
-        if (originalMessage.embeds.length > 0) {
-            embed = originalMessage.embeds[0];
-        }
-
-        let messageToSend =
-            `<@${authorID}> shamed in <#${originalMessage.channelId}>\n[Jump to Message](${messageLink})`;
-        if (embed) {
-            messageToSend += `\n\n**Embed**`;
-        }
-
-        skullboardChannel.send(messageToSend, { embeds: [embed] })
-            .then(() => {
-                console.log("Starboard message sent successfully!");
-            })
-            .catch((error) => {
-                console.error("Error sending starboard message:", error);
-            });
+    if (isFireboard) {
+        handleChannel(fireboardSettings.channelID, fireBoardData, 'fireboard', 'Fire reacted in Fireboard');
     }
 });
+
 
 async function getHeaderFileInfo(url) {
     try {
