@@ -66,7 +66,7 @@ client.on("messageCreate", async (message) => {
     }
 
     if (message.content.toLowerCase().startsWith(prefix + "creppymode true")) {
-        return message.reply("https://media.discordapp.net/attachments/1157523563729932360/1259053848048173107/120d6c08b3a21ca74c9127f47ccb1d527e931922bfcebf715ae76236448776d5_1.png?ex=668a48c5&is=6688f745&hm=e9fb0f0486ae1fb7134227b56075a4e154cd1cb564e2d8b86631a168e57edad1&=&format=webp&quality=lossless");
+        return message.reply("https://media.discordapp.net/attachments/1157523563729932361/1259053848048173107/120d6c08b3a21ca74c9127f47ccb1d527e931922bfcebf715ae76236448776d5_1.png?ex=668a48c5&is=6688f745&hm=e9fb0f0486ae1fb7134227b56075a4e154cd1cb564e2d8b86631a168e57edad1&=&format=webp&quality=lossless");
     }
 
     if (
