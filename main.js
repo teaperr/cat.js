@@ -7,6 +7,7 @@ const { channel } = require("diagnostics_channel");
 const { encode } = require("punycode");
 const { randomInt } = require("crypto");
 const { file } = require("grunt");
+const cheerio = require("cheerio");
 require("dotenv").config();
 
 // process .env config
@@ -51,7 +52,7 @@ client.on("messageCreate", async (message) => {
 		message.reply(greetMessages[Math.floor(Math.random() * greetMessages.length)]);
 	}
 	if (message.content.startsWith(prefix)) parseCommand(message);
-	checkIfTwitterLink(message);
+	if (!message.author.bot) checkIfTwitterLink(message);
 });
 
 function parseCommand(message) {
@@ -402,53 +403,53 @@ async function uploadImageCommand(message) {
 	const args = message.content.split(" ");
 	let uploadedContentURL = "";
 	let uploadedContentType = "";
+	let contentMessage;
+
+	// check for attachment
 	if (message.attachments.size > 0) {
 		uploadedContentURL = message.attachments.first().url;
 		uploadedContentType = message.attachments.first().contentType;
-	} else if (message.embeds[0].url) {
-		uploadedContentURL = message.embeds[0].url;
-		uploadedContentType = message.embeds[0].type;
+		contentMessage = message;
+	} else if (message.embeds.length > 0) {
+		// check for tenor gif video in embed
+		const embed = message.embeds[0];
+		if (embed.url.includes("tenor.com") && embed.video) {
+			uploadedContentURL = embed.video.url;
+		} else {
+			uploadedContentURL = embed.url;
+		}
+		uploadedContentType = embed.type;
+		contentMessage = message;
 	} else if (message.reference) {
+		// if replying to a message with attached content
 		try {
 			const repliedMessage = await message.fetchReference();
 			if (repliedMessage.attachments.size > 0) {
 				uploadedContentURL = repliedMessage.attachments.first().url;
 				uploadedContentType = repliedMessage.attachments.first().contentType;
-			} else if (repliedMessage.embeds[0].url) {
-				uploadedContentURL = repliedMessage.embeds[0].url;
-				uploadedContentType = repliedMessage.embeds[0].type;
+				contentMessage = repliedMessage;
+			} else if (repliedMessage.embeds.length > 0) {
+				const embed = repliedMessage.embeds[0];
+				if (embed.url.includes("tenor.com") && embed.video) {
+					uploadedContentURL = embed.video.url;
+				} else {
+					uploadedContentURL = embed.url;
+				}
+				uploadedContentType = embed.type;
+				contentMessage = repliedMessage;
 			}
 		} catch (error) {
 			console.error("err fetching referenced message: ", error);
 			return message.reply("could not find content in referenced message");
 		}
-	} else return message.reply(`
-please provide a url, attach a file or reply to a message with either of those :3
+	} else {
+		return message.reply(`
+please provide a url, attach a file, or reply to a message with either of those :3
 
 try ${prefix}help upload
 		`);
-
-	if (uploadedContentURL.includes("/tenor.com/")) {
-		try {
-			const response = await fetch(uploadedContentURL);
-			if (!response.ok) {
-				message.reply("could not access/invalid url");
-				throw new Error("network response was not ok");
-			}
-
-			const htmlContent = await response.text();
-			const tenorUrlMatch = htmlContent.match(/https?:\/\/(media1\.tenor\.com|media2\.giphy\.com)\/[^"]+/,);
-
-			if (!tenorUrlMatch) {
-				message.reply("could not download tenor gif (parse err)")
-				throw new Error("could not download tenor gif (parse err)");
-			}
-			uploadedContentURL = tenorUrlMatch[0];
-		} catch (error) {
-			console.error("error getting direct tenor url: ", error);
-			return message.reply("could not process url 💔");
-		}
 	}
+
 
 	let [contentType, contentLength, fileNameWithoutExtension, contentName] = await getHeaderFileInfo(uploadedContentURL);
 
@@ -689,7 +690,7 @@ function setFireBoardCommand(message) {
 			}
 		},
 	);
-	message.reply(`skullboard settings saved successfully:\nchannel: ${args[1]}\nemoji: ${voteEmoji}\ncount: ${voteCount}`);
+	message.reply(`fireboard settings saved successfully:\nchannel: ${args[1]}\nemoji: ${voteEmoji}\ncount: ${voteCount}`);
 }
 
 async function updateBoards(reaction, user) {
@@ -742,36 +743,62 @@ async function updateBoards(reaction, user) {
 		sentMessage: sentMessageId
 	};
 
-	if (!boardSettings.voteCount >= reaction.count) return;
+	if (!(reaction.count >= boardSettings.voteCount)) {
+		return console.log("gu");
+	}
 
 	let attachment;
+	let hasAttachment = false;
 	let reactionContentType = "";
 	if (reaction.message.attachments.first()) {
+		hasAttachment = true;
 		reactionContentType = reaction.message.attachments.first().contentType;
 		attachment = reaction.message.attachments.first();
 	} else if (reaction.message.embeds[0]) {
+		hasAttachment = true;
 		embed = reaction.message.embeds[0];
 		if (embed.type.includes("video") || embed.type.includes("image") || embed.type.includes("gifv")) {
 			reactionContentType = reaction.message.embeds[0].type;
 			attachment = reaction.message.embeds[0];
+			hasAttachment = true;
 		};
 	};
 
-	let embedUrlSection = {};
-
-	if (!reactionContentType == "" && reactionContentType.includes("video")) {
-		embedUrlSection.video = {
-			attachmentURL: attachment.url,
-			attachmentWidth: attachment.width,
-			attachmentHeight: attachment.height
-		};
-	} else if (!reactionContentType == "" && (reactionContentType.includes("image") || reactionContentType.includes("gifv"))) {
-		embedUrlSection.image = {
-			attachmentURL: attachment.url,
-			attachmentWidth: attachment.width,
-			attachmentHeight: attachment.height
-		};
+	let embedUrlSection = {
+		image: {
+			url: attachment.url,
+		},
 	};
+
+
+	const fields = [
+		{
+			name: "Source",
+			value: `[Jump to Message](${reaction.message.url})`,
+			inline: true
+		}
+	];
+
+	if (hasAttachment === true && reactionContentType.includes("video")) {
+		fields.push({
+			name: "Attachment",
+			value: `[${trimUrl(path.basename(attachment.url))}](${attachment.url})`,
+		});
+	}
+
+	// if (!reactionContentType == "" && reactionContentType.includes("video")) {
+	// 	embedUrlSection.image = {
+	// 		url: attachment.url,
+	// 		width: attachment.width,
+	// 		height: attachment.height
+	// 	};
+	// } else if (!reactionContentType == "" && (reactionContentType.includes("image"))) {
+	// 	embedUrlSection.image = {
+	// 		url: attachment.url,
+	// 		width: attachment.width,
+	// 		height: attachment.height
+	// 	};
+	// }
 
 	const messageData = {
 		content: `${boardSettings.voteEmoji} **${reaction.count}** <#${reaction.message.channelId}>`,
@@ -785,18 +812,12 @@ async function updateBoards(reaction, user) {
 				},
 				author: {
 					name: reaction.message.author.displayName,
-					iconURL: reaction.message.author.displayAvatarURL,
+					iconURL: reaction.message.author.avatarURL()
 				},
 				color: botAccentColour,
 				timestamp: reaction.message.createdTimestamp,
 				...embedUrlSection,
-				fields: [
-					{
-						name: "Source",
-						value: `[Jump to Message](${reaction.message.url})`,
-						inline: true
-					}
-				]
+				fields: fields,
 			}
 		]
 	};
@@ -831,6 +852,7 @@ async function updateBoards(reaction, user) {
 }
 
 async function getHeaderFileInfo(url) {
+	console.log("getting header info for: ", url)
 	try {
 		const response = await fetch(url, { method: "HEAD" });
 
